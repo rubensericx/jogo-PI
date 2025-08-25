@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ChronoBlitz Insano</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    canvas {
+      border: 2px solid #f00;
+      background-color: #000;
+      box-shadow: 0 0 20px #f00;
+    }
+
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #f00;
+      font-family: monospace;
+      font-size: 14px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 12px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="ui">WASD ou Setas para mover • R para reiniciar • Sobreviva o máximo possível</div>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let player, enemies, keys, score, health, gameOver, enemySpeed, spawnTimer, difficultyTimer;
+
+    function init() {
+      player = { x: 400, y: 300, size: 20, color: "#0f0", speed: 4 };
+      enemies = [createEnemy(100, 100)];
+      keys = {};
+      score = 0;
+      health = 3;
+      enemySpeed = 1.5;
+      gameOver = false;
+      spawnTimer = 0;
+      difficultyTimer = 0;
+    }
+
+    function createEnemy(x, y) {
+      return {
+        x, y,
+        size: 20,
+        color: "#f00",
+        speed: enemySpeed,
+        dx: 0, dy: 0
+      };
+    }
+
+    document.addEventListener("keydown", (e) => {
+      keys[e.key.toLowerCase()] = true;
+      if (gameOver && e.key.toLowerCase() === "r") {
+        init();
+      }
+    });
+
+    document.addEventListener("keyup", (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    function movePlayer() {
+      let moved = false;
+      let slowFactor = health < 3 ? 1.5 - health * 0.3 : 1;
+      if (keys["arrowup"] || keys["w"]) { player.y -= player.speed / slowFactor; moved = true; }
+      if (keys["arrowdown"] || keys["s"]) { player.y += player.speed / slowFactor; moved = true; }
+      if (keys["arrowleft"] || keys["a"]) { player.x -= player.speed / slowFactor; moved = true; }
+      if (keys["arrowright"] || keys["d"]) { player.x += player.speed / slowFactor; moved = true; }
+
+      player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+
+      return moved;
+    }
+
+    function moveEnemies() {
+      enemies.forEach(e => {
+        let dx = player.x - e.x;
+        let dy = player.y - e.y;
+        let dist = Math.max(0.01, Math.sqrt(dx * dx + dy * dy));
+        e.dx = (dx / dist) * e.speed;
+        e.dy = (dy / dist) * e.speed;
+        e.x += e.dx;
+        e.y += e.dy;
+      });
+    }
+
+    function checkCollision(a, b) {
+      return (
+        a.x < b.x + b.size &&
+        a.x + a.size > b.x &&
+        a.y < b.y + b.size &&
+        a.y + a.size > b.y
+      );
+    }
+
+    function drawHUD() {
+      ctx.fillStyle = "#f00";
+      ctx.font = "16px monospace";
+      ctx.fillText(`Score: ${score}`, 10, 20);
+      ctx.fillText(`Vida: ${health}`, 10, 40);
+      ctx.fillText(`Inimigos: ${enemies.length}`, 10, 60);
+    }
+
+    function drawEntities() {
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.size, player.size);
+
+      enemies.forEach(e => {
+        ctx.fillStyle = e.color;
+        ctx.fillRect(e.x, e.y, e.size, e.size);
+      });
+    }
+
+    function flashScreen() {
+      canvas.style.filter = "brightness(200%)";
+      setTimeout(() => {
+        canvas.style.filter = "brightness(100%)";
+      }, 100);
+    }
+
+    function spawnEnemyRandom() {
+      let side = Math.floor(Math.random() * 4);
+      let x = 0, y = 0;
+      if (side === 0) { x = 0; y = Math.random() * canvas.height; }
+      if (side === 1) { x = canvas.width; y = Math.random() * canvas.height; }
+      if (side === 2) { x = Math.random() * canvas.width; y = 0; }
+      if (side === 3) { x = Math.random() * canvas.width; y = canvas.height; }
+      enemies.push(createEnemy(x, y));
+    }
+
+    function gameLoop(timestamp) {
+      if (gameOver) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "40px monospace";
+        ctx.fillText("GAME OVER", canvas.width / 2 - 130, canvas.height / 2);
+        ctx.font = "20px monospace";
+        ctx.fillText("Pressione R para reiniciar", canvas.width / 2 - 130, canvas.height / 2 + 40);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const moved = movePlayer();
+      moveEnemies();
+
+      if (moved || timestamp % 2 === 0) score++;
+
+      enemies.forEach(e => {
+        if (checkCollision(player, e)) {
+          health--;
+          flashScreen();
+          e.x = Math.random() * (canvas.width - e.size);
+          e.y = Math.random() * (canvas.height - e.size);
+          if (health <= 0) gameOver = true;
+        }
+      });
+
+      spawnTimer++;
+      difficultyTimer++;
+
+      // Spawn inimigos a cada 3 segundos
+      if (spawnTimer > 180) {
+        spawnEnemyRandom();
+        spawnTimer = 0;
+      }
+
+      // Aumenta dificuldade a cada 10 segundos
+      if (difficultyTimer > 600) {
+        enemySpeed += 0.3;
+        enemies.forEach(e => e.speed = enemySpeed);
+        difficultyTimer = 0;
+      }
+
+      drawEntities();
+      drawHUD();
+      requestAnimationFrame(gameLoop);
+    }
+
+    init();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
